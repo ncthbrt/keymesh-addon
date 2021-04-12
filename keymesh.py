@@ -1,7 +1,9 @@
 import bpy
 import re
 from bpy.app.handlers import persistent
- 
+from bpy_extras.io_utils import ExportHelper
+from pathlib import Path
+
 bl_info = {
     "name": "Keymesh Alpha",
     "author": "Pablo Dobarro (Developer), Daniel Martinez Lara (Animation and Testing)",
@@ -216,6 +218,46 @@ class InitializeHandler(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
+    bl_idname = "object.keyframe_mesh_obj"       
+    bl_label = "Export Obj Sequence"
+    bl_options = {'REGISTER'}   
+    filename_ext = ".obj"
+
+    @classmethod
+    def poll(cls, context): 
+        for o in bpy.context.selected_objects: 
+            if "km_datablock" and "km_id" in o:
+                return True
+        return False
+        
+    def execute(self, context):
+        frame_end = -99999
+        frame_start = 99999
+        current_frame = bpy.context.scene.frame_current
+        obs = bpy.context.selected_objects
+        for o in obs:    
+            if "km_datablock" and "km_id" in o: # It's a Keymesh scene
+                this_end = o.users_scene[0].frame_end
+                this_start = o.users_scene[0].frame_start
+                if(this_end > frame_end): 
+                    frame_end = this_end
+                if(this_start < frame_start): 
+                    frame_start = this_start
+            break    
+
+        file_path = Path(self.filepath)
+        folder_path = file_path.parent
+        for i in range(frame_start, frame_end + 1): 
+            filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name.replace(".obj","_") + str(i) + ".obj").absolute())
+            bpy.context.scene.frame_current = i
+            km_frame_handler(0)
+            bpy.ops.export_scene.obj(filepath=filename, use_materials=False)
+#            exportName = exportFolder + object.name + '.fbx'
+        bpy.context.scene.frame_current = current_frame
+        km_frame_handler(0)
+        return {'FINISHED'}
+
 
 class KeymeshPanel(bpy.types.Panel):
     bl_idname = "VIEW3D_PT_keymesh_panel"
@@ -229,16 +271,21 @@ class KeymeshPanel(bpy.types.Panel):
         self.layout.operator("object.purge_keymesh_data", text="Purge Keymesh Data")
         self.layout.separator()
         self.layout.operator("object.initialize_handler", text="Initialize Frame Handler")
-           
+
+def menu_func_export(self, context):
+    self.layout.operator(KeyframeMeshObjExport.bl_idname, text="Export Keyframed Obj Seq (.obj)")   
+
 def register():
     bpy.utils.register_class(KeyframeMesh)
     bpy.utils.register_class(PurgeKeymeshData)
     bpy.utils.register_class(InitializeHandler)
     bpy.utils.register_class(KeymeshPanel)
+    bpy.utils.register_class(KeyframeMeshObjExport)
     bpy.app.handlers.load_post.append(km_frame_handler)
     bpy.app.handlers.frame_change_post.clear()
     bpy.app.handlers.frame_change_post.append(updateKeymesh)
- 
+    bpy.types.TOPBAR_MT_file_export.append(menu_func_export)        
+
  
 def unregister():
     bpy.utils.unregister_class(KeyframeMesh)
@@ -247,6 +294,9 @@ def unregister():
     bpy.utils.unregister_class(KeymeshPanel)
     bpy.app.handlers.load_post.remove(km_frame_handler)
     bpy.app.handlers.frame_change_post.clear()
+    bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 
-##if __name__ == "__main__":
-##    register() 
+if __name__ == "__main__":
+#    unregister()
+
+    register()
