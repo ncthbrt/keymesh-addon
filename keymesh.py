@@ -3,6 +3,7 @@ import re
 from bpy.app.handlers import persistent
 from bpy_extras.io_utils import ExportHelper
 from pathlib import Path
+import json
 
 bl_info = {
     "name": "Keymesh Alpha",
@@ -248,10 +249,15 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
 
         file_path = Path(self.filepath)
         folder_path = file_path.parent
+        
+        materials = {}
+        keyframes=[]
+        
         for i in range(frame_start, frame_end + 1): 
             bpy.context.scene.frame_current = i
             km_frame_handler(0)
             dirty = False
+#           Test if this is a keyframe and thus needs to be exported
             for o in obs: 
                fcurves = o.animation_data.action.fcurves         
                for fcurve in fcurves:
@@ -263,8 +269,21 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
                             dirty = True
                             break
             if dirty:        
+                keyframes.append(i)
+                for o in obs:
+                    for mat in o.material_slots:
+                        materials[mat.name] = True
                 filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name.replace(".obj","_") + str(i) + ".obj").absolute())
                 bpy.ops.export_scene.obj(filepath=filename, use_materials=False)
+
+        
+        json_data_filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name.replace(".obj","") + "data.json").absolute())
+    
+        with open(json_data_filename, 'w') as outfile:
+            json.dump({
+                "materials": list(materials.keys()), 
+                "keyframes": list(keyframes)
+            }, outfile)
 
         bpy.context.scene.frame_current = current_frame
         km_frame_handler(0)
