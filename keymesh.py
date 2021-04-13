@@ -245,7 +245,7 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
                     frame_end = this_end
                 if(this_start < frame_start): 
                     frame_start = this_start
-            break    
+    
 
         file_path = Path(self.filepath)
         folder_path = file_path.parent
