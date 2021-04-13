@@ -257,7 +257,7 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
             bpy.context.scene.frame_current = i
             km_frame_handler(0)
             dirty = False
-#           Test if this is a keyframe and thus needs to be exported
+
             for o in obs: 
                fcurves = o.animation_data.action.fcurves         
                for fcurve in fcurves:
@@ -327,7 +327,5 @@ def unregister():
     bpy.app.handlers.frame_change_post.clear()
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 
-if __name__ == "__main__":
-#    unregister()
-
-    register()
+# if __name__ == "__main__":
+#    register()
