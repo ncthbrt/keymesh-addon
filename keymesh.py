@@ -249,11 +249,23 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
         file_path = Path(self.filepath)
         folder_path = file_path.parent
         for i in range(frame_start, frame_end + 1): 
-            filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name.replace(".obj","_") + str(i) + ".obj").absolute())
             bpy.context.scene.frame_current = i
             km_frame_handler(0)
-            bpy.ops.export_scene.obj(filepath=filename, use_materials=False)
-#            exportName = exportFolder + object.name + '.fbx'
+            dirty = False
+            for o in obs: 
+               fcurves = o.animation_data.action.fcurves         
+               for fcurve in fcurves:
+                    if fcurve.data_path != '["km_datablock"]':
+                        continue                
+                
+                    for keyframe in fcurve.keyframe_points:
+                        if i == int(keyframe.co.x):
+                            dirty = True
+                            break
+            if dirty:        
+                filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name.replace(".obj","_") + str(i) + ".obj").absolute())
+                bpy.ops.export_scene.obj(filepath=filename, use_materials=False)
+
         bpy.context.scene.frame_current = current_frame
         km_frame_handler(0)
         return {'FINISHED'}
