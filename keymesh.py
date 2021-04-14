@@ -277,7 +277,7 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
                 bpy.ops.export_scene.obj(filepath=filename, use_materials=False)
 
         
-        json_data_filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name.replace(".obj","") + "data.json").absolute())
+        json_data_filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name + ".json").absolute())
     
         with open(json_data_filename, 'w') as outfile:
             json.dump({
