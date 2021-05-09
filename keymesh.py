@@ -227,6 +227,7 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
 
     @classmethod
     def poll(cls, context): 
+        # It's a Keymesh scene
         for o in bpy.context.selected_objects: 
             if "km_datablock" and "km_id" in o:
                 return True
@@ -236,57 +237,81 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
         frame_end = -99999
         frame_start = 99999
         current_frame = bpy.context.scene.frame_current
-        obs = bpy.context.selected_objects
-        for o in obs:    
-            if "km_datablock" and "km_id" in o: # It's a Keymesh scene
-                this_end = o.users_scene[0].frame_end
-                this_start = o.users_scene[0].frame_start
-                if(this_end > frame_end): 
-                    frame_end = this_end
-                if(this_start < frame_start): 
-                    frame_start = this_start
+        obs = list(bpy.context.selected_objects)
+
+        objects = []
+        
+        framerate = 11 
+        # Get length of the current action
+        for o in obs:
+            framerate = o.users_scene[0].render.fps
+            this_end = o.users_scene[0].frame_end
+            this_start = o.users_scene[0].frame_start
+            if(this_end > frame_end): 
+                frame_end = this_end
+            if(this_start < frame_start): 
+                frame_start = this_start
+
     
-
         file_path = Path(self.filepath)
-        folder_path = file_path.parent
-        
+        folder_path = file_path.parent        
         materials = {}
-        keyframes=[]
         
-        for i in range(frame_start, frame_end + 1): 
-            bpy.context.scene.frame_current = i
-            km_frame_handler(0)
-            dirty = False
+        
+        bpy.ops.object.select_all(action='DESELECT')
+            
+        for o in obs:
+            keyframes=[]
+            o.select_set(True)
+        
+            for i in range(frame_start, frame_end + 1): 
+                bpy.context.scene.frame_current = i
+                km_frame_handler(0)
+                dirty = False
 
-            for o in obs: 
-               fcurves = o.animation_data.action.fcurves         
-               for fcurve in fcurves:
+                fcurves = o.animation_data.action.fcurves
+                for fcurve in fcurves:
                     if fcurve.data_path != '["km_datablock"]':
                         continue                
-                
+                    
                     for keyframe in fcurve.keyframe_points:
                         if i == int(keyframe.co.x):
                             dirty = True
                             break
-            if dirty:        
-                keyframes.append(i)
-                for o in obs:
-                    for mat in o.material_slots:
-                        materials[mat.name] = True
-                filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name.replace(".obj","_") + str(i) + ".obj").absolute())
-                bpy.ops.export_scene.obj(filepath=filename, use_materials=False)
+                                            
+                if dirty:        
+                    keyframes.append(i)
+                        
+                    filename = str(Path(str(folder_path.absolute()) +"/" + re.sub(r'\.obj$',"_",file_path.name) + o.name + "_" + str(i) + ".obj").absolute())
+                    bpy.ops.export_scene.obj(filepath=filename, use_materials=False, use_selection=True, use_blen_objects=True, group_by_object=True)
 
-        
-        json_data_filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name + ".json").absolute())
+            object_material_slots=[]
+            for mat in o.material_slots:
+                materials[mat.name] = True        
+                object_material_slots.append(mat.name)
+            o.select_set(False)
+
+            objects.append({
+                "name": o.name,
+                "keyframes": list(keyframes),
+                "materials": list(object_material_slots)
+            })        
+                            
+        json_data_filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name + ".objseq").absolute())
+
     
         with open(json_data_filename, 'w') as outfile:
-            json.dump({
+            json.dump({ 
                 "materials": list(materials.keys()), 
-                "keyframes": list(keyframes)
+                "frame_start": frame_start,
+                "frame_end": frame_end,
+                "frame_rate": framerate,
+                "objects": list(objects)
             }, outfile)
 
         bpy.context.scene.frame_current = current_frame
         km_frame_handler(0)
+        
         return {'FINISHED'}
 
 
@@ -327,5 +352,5 @@ def unregister():
     bpy.app.handlers.frame_change_post.clear()
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
 
-# if __name__ == "__main__":
-#    register()
+if __name__ == "__main__":
+    register()
