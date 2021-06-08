@@ -219,6 +219,70 @@ class InitializeHandler(bpy.types.Operator):
         return {'FINISHED'}
 
 
+class KeymeshSmartUVProject(bpy.types.Operator):    
+    bl_idname = "object.keymesh_smart_uv_project"
+    bl_label = "Smart UV Project Keymesh"
+    @classmethod
+    def poll(cls, context): 
+        # It's a Keymesh scene
+        for o in bpy.context.selected_objects: 
+            if "km_datablock" and "km_id" in o:
+                return True
+        return False
+        
+    def execute(self, context):
+        obs = []
+        for o in bpy.context.selected_objects:
+            if "km_datablock" and "km_id" in o:
+                obs.append(o)
+                
+        frame_end = -99999
+        frame_start = 99999
+        current_frame = bpy.context.scene.frame_current
+        
+        for o in obs:            
+            this_end = o.users_scene[0].frame_end
+            this_start = o.users_scene[0].frame_start
+            if(this_end > frame_end): 
+                frame_end = this_end
+            if(this_start < frame_start): 
+                frame_start = this_start
+        
+        # Not quite right yet. Need to iterate over each keyframe 
+        for o in obs:
+            o.select_set(True)
+            for i in range(frame_start, frame_end + 1): 
+                bpy.ops.object.mode_set(mode='OBJECT')
+                bpy.context.scene.frame_current = i        
+                km_frame_handler(0)
+                updateKeymesh(bpy.context.scene)
+                dirty = False
+
+                fcurves = o.animation_data.action.fcurves
+                for fcurve in fcurves:
+                    if fcurve.data_path != '["km_datablock"]':
+                        continue                
+                    
+                    for keyframe in fcurve.keyframe_points:
+                        if i == int(keyframe.co.x):
+                            dirty = True
+                            break
+                                            
+                if dirty:                           
+                    bpy.context.view_layer.objects.active = o
+                    bpy.ops.object.mode_set(mode='EDIT')
+                    bpy.ops.mesh.select_all(action = 'SELECT')
+                    bpy.ops.uv.smart_project()
+
+        bpy.ops.object.mode_set(mode='OBJECT')
+
+        bpy.context.scene.frame_current = current_frame
+        km_frame_handler(0)
+        
+        return {'FINISHED'}
+            
+            
+#bpy.ops.uv.smart_project
 class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
     bl_idname = "object.keyframe_mesh_obj"       
     bl_label = "Export Obj Sequence"
@@ -263,7 +327,7 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
         for o in obs:
             keyframes=[]
             o.select_set(True)
-        
+            object_material_slots={}        
             for i in range(frame_start, frame_end + 1): 
                 bpy.context.scene.frame_current = i
                 km_frame_handler(0)
@@ -280,21 +344,23 @@ class KeyframeMeshObjExport(bpy.types.Operator, ExportHelper):
                             break
                                             
                 if dirty:        
-                    keyframes.append(i)
-                        
+                    frame_materials=[]
+                    for mat in o.material_slots:
+                        materials[mat.name] = True        
+                        object_material_slots[mat.name] = True
+                        frame_materials.append(mat.name)
+                    keyframes.append({"frame":i, "materials": list(frame_materials) })
                     filename = str(Path(str(folder_path.absolute()) +"/" + re.sub(r'\.obj$',"_",file_path.name) + o.name + "_" + str(i) + ".obj").absolute())
-                    bpy.ops.export_scene.obj(filepath=filename, use_materials=False, use_selection=True, use_blen_objects=True, group_by_object=True)
+                    bpy.ops.export_scene.obj(filepath=filename, use_materials=True, use_selection=True, use_blen_objects=True, group_by_object=True)
 
-            object_material_slots=[]
-            for mat in o.material_slots:
-                materials[mat.name] = True        
-                object_material_slots.append(mat.name)
+            
+                 
             o.select_set(False)
 
             objects.append({
                 "name": o.name,
                 "keyframes": list(keyframes),
-                "materials": list(object_material_slots)
+                "materials": list(object_material_slots.keys())
             })        
                             
         json_data_filename = str(Path(str(folder_path.absolute()) +"/" + file_path.name + ".objseq").absolute())
@@ -327,6 +393,8 @@ class KeymeshPanel(bpy.types.Panel):
         self.layout.operator("object.purge_keymesh_data", text="Purge Keymesh Data")
         self.layout.separator()
         self.layout.operator("object.initialize_handler", text="Initialize Frame Handler")
+        self.layout.separator()
+        self.layout.operator("object.keymesh_smart_uv_project", text="Smart UV Project")
 
 def menu_func_export(self, context):
     self.layout.operator(KeyframeMeshObjExport.bl_idname, text="Export Keyframed Obj Seq (.obj)")   
@@ -337,6 +405,7 @@ def register():
     bpy.utils.register_class(InitializeHandler)
     bpy.utils.register_class(KeymeshPanel)
     bpy.utils.register_class(KeyframeMeshObjExport)
+    bpy.utils.register_class(KeymeshSmartUVProject)
     bpy.app.handlers.load_post.append(km_frame_handler)
     bpy.app.handlers.frame_change_post.clear()
     bpy.app.handlers.frame_change_post.append(updateKeymesh)
@@ -348,6 +417,7 @@ def unregister():
     bpy.utils.unregister_class(PurgeKeymeshData)
     bpy.utils.unregister_class(InitializeHandler)
     bpy.utils.unregister_class(KeymeshPanel)
+    bpy.utils.unregister_class(KeymeshSmartUVProject)
     bpy.app.handlers.load_post.remove(km_frame_handler)
     bpy.app.handlers.frame_change_post.clear()
     bpy.types.TOPBAR_MT_file_export.remove(menu_func_export)
